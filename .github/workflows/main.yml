@@ -1,0 +1,38 @@
+name: Tests
+
+on: [ push, pull_request ]
+
+jobs:
+    build:
+        runs-on: 'ubuntu-latest'
+        strategy:
+            matrix:
+                php-versions: [ '8.0', '8.1' ]
+
+        steps:
+            -   uses: actions/checkout@v2
+
+            -   name: Setup PHP with PCOV
+                uses: shivammathur/setup-php@v2
+                with:
+                    php-version: ${{ matrix.php-versions }}
+                    coverage: pcov
+
+            -   name: Validate composer.json and composer.lock
+                run: composer validate --strict
+
+            -   name: Install dependencies
+                run: composer update --prefer-dist --no-progress --no-interaction
+
+            -   name: Dump Autoload
+                run: composer dump-autoload
+
+            -   name: Run linter
+                run: ./vendor/bin/pint -v --test
+
+            -   name: Run tests
+                run: php ./vendor/bin/pest -v --coverage-clover clover.xml
+
+            -   uses: php-actions/phpstan@v3
+                with:
+                    path: src/
