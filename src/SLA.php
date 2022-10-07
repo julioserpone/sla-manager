@@ -7,8 +7,8 @@ use Carbon\CarbonInterface;
 use Carbon\CarbonInterval;
 use Carbon\CarbonPeriod;
 use Cmixin\EnhancedPeriod;
-use ReflectionException;
 use JulioSerpone\SlaManager\Interfaces\AgendaInterface;
+use ReflectionException;
 
 class SLA
 {
