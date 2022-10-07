@@ -34,7 +34,7 @@ function turnOffJob() {
 <div class="px-6 sm:px-12 lg:px-16">
 <div class="container" style="max-width: 1152px; margin: 0 auto; text-align: center; padding: 40px 0;">
 
-<a href="https://twitter.com/sifex/status/1548374115815346178">
+<a href="https://twitter.com/julioserpone/status/1578441324558135298">
 <Transition>
 <img class="hidden md:block" v-show="want_job" @load="turnOffJob()" src="https://github.com/julioserpone/sla-timer/raw/HEAD/.github/assets/hiring.svg?" alt="Hi, I'm Julio & I'm currently looking for a Laravel job. Please reach out to me via twitter, or click this link." height="49">
 </Transition>

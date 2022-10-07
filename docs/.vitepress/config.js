@@ -1,6 +1,6 @@
 export default {
-    title: 'SLA Timer',
-    base: '/sla-timer/',
+    title: 'SLA Manager',
+    base: '/sla-manager/',
     description: 'A PHP package for calculating & tracking the Service Level Agreement completion timings.',
     head: [
         // ['link', { rel: "apple-touch-icon", sizes: "180x180", href: "/assets/favicons/apple-touch-icon.png"}],
@@ -41,10 +41,10 @@ export default {
         ],
         footer: {
             message: 'Released under the MIT License.',
-            copyright: 'Copyright © 2022-present alex@sinn.io'
+            copyright: 'Copyright © 2022-present juliohernandezs@gmail.com'
         },
         socialLinks: [
-            { icon: 'github', link: 'https://github.com/sifex/sla-timer' },
+            { icon: 'github', link: 'https://github.com/julioserpone/sla-manager' },
         ],
     }
 }
