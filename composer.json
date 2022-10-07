@@ -1,0 +1,53 @@
+{
+    "name": "julioserpone/sla-manager",
+    "description": "A PHP package for calculating & tracking the Service Level Agreement completion timings",
+    "keywords": [
+        "julioserpone",
+        "sla-manager"
+    ],
+    "homepage": "https://github.com/julioserpone/sla-manager",
+    "license": "MIT",
+    "type": "library",
+    "authors": [
+        {
+            "name": "Julio César Hérnandez",
+            "email": "juliohernandezs@gmail.com",
+            "role": "Developer Fullstack"
+        }
+    ],
+    "require": {
+        "php": "^8.0",
+        "cmixin/enhanced-period": "^1.2",
+        "illuminate/collections": "^8|^9|^10|^11",
+        "nesbot/carbon": "^2",
+        "spatie/period": "^2"
+    },
+    "require-dev": {
+        "laravel/pint": "^1.0",
+        "pestphp/pest": "^1.21",
+        "phpstan/phpstan": "^1.8",
+        "phpunit/phpunit": "^9.0",
+        "spatie/invade": "^1.1",
+        "spatie/pest-plugin-test-time": "^1.1"
+    },
+    "autoload": {
+        "psr-4": {
+            "JulioSerpone\\SlaManager\\": "src"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "JulioSerpone\\SlaManager\\Tests\\": "tests"
+        }
+    },
+    "scripts": {
+        "test": "vendor/bin/pest",
+        "test-coverage": "vendor/bin/pest--coverage-clover clover.xml"
+    },
+    "config": {
+        "allow-plugins": {
+            "pestphp/pest-plugin": true
+        },
+        "sort-packages": true
+    }
+}

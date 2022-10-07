@@ -1,0 +1,16 @@
+build
+vendor
+coverage
+.php-cs-fixer.cache
+.phpunit.result.cache
+.idea/
+clover.xml
+/docs/node_modules/
+
+node_modules/
+
+docs/.vitepress/dist/
+
+cachegrind.out.18991.gz
+.DS_Store
+*.gz
