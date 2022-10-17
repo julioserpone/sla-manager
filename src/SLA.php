@@ -33,6 +33,8 @@ class SLA
      */
     private array $pause_periods = [];
 
+    private float|int $fulfillment;
+
     /**
      * @param  SLASchedule|array  $schedules
      *
@@ -212,6 +214,10 @@ class SLA
              */
         })->pipe(fn ($c) => self::combine_intervals($c->toArray()));
 
+        $this->fulfillment = collect($this->breach_definitions)
+            ->each(fn (SLABreach $b) => $b->check($interval))
+            ->sum(fn (SLABreach $b) => $b->fulfillment);
+
         return new SLAStatus(
             collect($this->breach_definitions)
                 ->each(fn (SLABreach $b) => $b->check($interval))
@@ -310,5 +316,12 @@ class SLA
     private static function filter_out_excluded_dates(Carbon $date): bool
     {
         return true;
+    }
+
+    public function fulfillment($subject_start_time, $subject_stop_time = null): float|int
+    {
+        $this->calculate($subject_start_time, $subject_stop_time);
+
+        return $this->fulfillment;
     }
 }

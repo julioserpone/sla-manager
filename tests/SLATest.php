@@ -104,6 +104,40 @@ it('tests the SLA over certain other days', function () {
         ->and(expect($sla->status($subject_start_time)->breaches)->toHaveCount(0));
 });
 
+it('tests that the percentage of fulfillment of an SLA is positive', function () {
+    $subject_start_time = '2022-07-20 08:59:00';
+    $time_now = '2022-07-20 09:05:00';
+
+    $sla = SLA::fromSchedule(
+        SLASchedule::create()->from('09:00:00')->to('17:00:00')->on('Wednesdays')
+    );
+
+    $sla->addBreaches(
+        new SLABreach('Time to First Response', '15m'),
+        new SLABreach('Time to Resolution', '5m')
+    );
+
+    testTime()->freeze($time_now);
+    print_r($sla->fulfillment($subject_start_time));
+    expect($sla->fulfillment($subject_start_time))->toBeGreaterThan(50);    //66.666666666667%
+});
+
+it('tests that the percentage of fulfillment of an SLA is negative', function () {
+    $subject_start_time = '2022-07-20 08:59:00';
+    $time_now = '2022-07-20 09:16:00';
+
+    $sla = SLA::fromSchedule(
+        SLASchedule::create()->from('09:00:00')->to('17:00:00')->on('Wednesdays')
+    );
+
+    $sla->addBreaches(
+        new SLABreach('Time to First Response', '15m')
+    );
+
+    testTime()->freeze($time_now);
+    expect($sla->fulfillment($subject_start_time))->toEqual(0);
+});
+
 it('tests the SLA with double declaration of SLAs', function () {
     $subject_start_time = '2022-07-21 08:59:00';
     $time_now = '2022-07-21 09:00:30';
