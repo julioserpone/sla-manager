@@ -321,6 +321,7 @@ class SLA
     public function fulfillment($subject_start_time, $subject_stop_time = null): float|int
     {
         $this->calculate($subject_start_time, $subject_stop_time);
+
         return $this->fulfillment;
     }
 }

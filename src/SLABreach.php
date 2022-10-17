@@ -31,12 +31,9 @@ class SLABreach
         $start = $current_interval->cascade()->totalSeconds;
         $end = $this->breached_after->cascade()->totalSeconds;
 
-        if ($start > $end)
-        {
+        if ($start > $end) {
             $this->fulfillment = 0;
-        }
-        else
-        {
+        } else {
             $this->fulfillment = 100 - (($start * 100) / $end);
         }
     }
