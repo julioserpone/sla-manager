@@ -118,7 +118,6 @@ it('tests that the percentage of fulfillment of an SLA is positive', function ()
     );
 
     testTime()->freeze($time_now);
-    print_r($sla->fulfillment($subject_start_time));
     expect($sla->fulfillment($subject_start_time))->toBeGreaterThan(50);    //66.666666666667%
 });
 
@@ -325,21 +324,20 @@ it('tests empty schedule', function () {
     expect($sla->duration($subject_start_time)->totalSeconds)->toEqual(0);
 });
 
-//it('tests 0 length SLAs', function () {
-//    $subject_start_time = '2022-07-21 08:59:00';
-//    $time_now = '2022-07-21 09:00:30';
-//
-//    $sla = SLA::fromSchedule(
-//        SLASchedule::create()->from('09:00:00')->to('17:00:00')
-//    );
-//
-//    testTime()->freeze($time_now);
-//
-//    expect($sla->duration($subject_start_time)->totalSeconds)->toEqual(30);
-//
-//    $sla->addSchedule(
-//        SLASchedule::create()->effectiveFrom('2022-07-20')->from('09:00:00')->to('09:00:01')->everyDay()
-//    );
-//
-//    expect($sla->duration($subject_start_time)->totalSeconds)->toEqual(1);
-//});
+it('test the SLA where the current date has a time less than the time of the initial date', function () {
+    $subject_start_time = '2022-10-18 16:00:00';
+    $time_now = '2022-10-19 08:00:01';
+
+    $sla = SLA::fromSchedule(
+        SLASchedule::create()->from('08:00:00')->to('17:00:00')->everyDay()
+    );
+
+    $sla->addBreaches(
+        new SLABreach('Time to First Response', '15m')
+    );
+
+    testTime()->freeze($time_now);
+    expect($sla->duration($subject_start_time)->totalSeconds)->toEqual(3601)
+        ->and(expect($sla->status($subject_start_time)->breaches)->toHaveCount(1))
+        ->and(expect($sla->status($subject_start_time)->breaches[0]->breached)->toEqual(true));
+});
