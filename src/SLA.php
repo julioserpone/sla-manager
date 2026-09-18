@@ -386,7 +386,7 @@ class SLA
         return true;
     }
 
-    public function fulfillment($subject_start_time, $subject_stop_time = null): float|int
+    public function fulfillment(string $subject_start_time, ?string $subject_stop_time = null): float|int
     {
         $this->calculate($subject_start_time, $subject_stop_time);
 
