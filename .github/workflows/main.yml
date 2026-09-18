@@ -7,22 +7,23 @@ jobs:
         runs-on: 'ubuntu-latest'
         strategy:
             matrix:
-                php-versions: [ '8.0', '8.1' ]
+                php-versions: [ '8.3', '8.4' ]
 
         steps:
-            -   uses: actions/checkout@v2
+            -   uses: actions/checkout@v4
 
             -   name: Setup PHP with PCOV
                 uses: shivammathur/setup-php@v2
                 with:
                     php-version: ${{ matrix.php-versions }}
                     coverage: pcov
+                    tools: composer
+
+            -   name: Refresh lock file to match composer.json
+                run: composer update --prefer-dist --no-progress --no-interaction
 
             -   name: Validate composer.json and composer.lock
                 run: composer validate --strict
-
-            -   name: Install dependencies
-                run: composer update --prefer-dist --no-progress --no-interaction
 
             -   name: Dump Autoload
                 run: composer dump-autoload
