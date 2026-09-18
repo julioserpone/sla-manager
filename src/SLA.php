@@ -7,8 +7,8 @@ use Carbon\CarbonInterface;
 use Carbon\CarbonInterval;
 use Carbon\CarbonPeriod;
 use Cmixin\EnhancedPeriod;
-use ReflectionException;
 use JulioSerpone\SlaManager\Interfaces\AgendaInterface;
+use ReflectionException;
 
 class SLA
 {
@@ -389,6 +389,7 @@ class SLA
     public function fulfillment($subject_start_time, $subject_stop_time = null): float|int
     {
         $this->calculate($subject_start_time, $subject_stop_time);
+
         return $this->fulfillment;
     }
 }

@@ -116,7 +116,7 @@ it('tests that the percentage of fulfillment of an SLA is positive', function ()
     );
 
     testTime()->freeze($time_now);
-    expect($sla->fulfillment($subject_start_time))->toBeGreaterThan(50);    //66.666666666667%
+    expect($sla->fulfillment($subject_start_time))->toBeGreaterThan(50);    // 66.666666666667%
 });
 
 it('tests that the percentage of fulfillment of an SLA is negative', function () {
