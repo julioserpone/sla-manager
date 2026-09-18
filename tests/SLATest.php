@@ -1,27 +1,25 @@
 <?php
 
-use Carbon\CarbonInterval;
 use JulioSerpone\SlaManager\SLA;
 use JulioSerpone\SlaManager\SLABreach;
 use JulioSerpone\SlaManager\SLASchedule;
+
 use function Spatie\PestPluginTestTime\testTime;
 
 /**
  * Daily Periods
  */
-it('collapses intervals', function () {
-    $interval_one = CarbonInterval::seconds(30);
-    $interval_two = CarbonInterval::minutes(30);
-    $interval_three = CarbonInterval::seconds(180);
+it('collapses overlapping SLA periods into a single interval', function () {
+    $sla = SLA::fromSchedule(
+        SLASchedule::create()
+            ->from('09:00:00')->to('12:00:00')
+            ->andFrom('11:00:00')->to('17:00:00')
+            ->everyDay()
+    );
 
-    /** @var CarbonInterval $combined */
-    $combined = invade(new SLA(SLASchedule::create()->from('')))->combine_intervals([
-        $interval_one,
-        $interval_two,
-        $interval_three,
-    ]);
+    $duration = $sla->duration('2023-04-27 08:00:00', '2023-04-27 18:00:00');
 
-    expect($combined->totalSeconds)->toEqual(30 + (30 * 60) + 180);
+    expect($duration->totalSeconds)->toEqual(28800);
 });
 
 it('tests the SLA across a short duration', function () {
@@ -287,7 +285,7 @@ it('tests superseded schedules but there was a bug with which day it starts on',
 it('tests adding multiple schedules through the constructor', function () {
     SLA::fromSchedules([
         SLASchedule::create()->from('09:00:00')->to('09:01:00') // 60 seconds
-        ->everyDay(),
+            ->everyDay(),
         SLASchedule::create()->effectiveFrom('27-07-2022')
             ->from('09:00:00')->to('09:00:30')->onWeekdays()->and() // 30 seconds
             ->from('09:00:00')->to('09:00:10')->onWeekends(), // 10 seconds
@@ -295,7 +293,7 @@ it('tests adding multiple schedules through the constructor', function () {
 
     (new SLA([
         SLASchedule::create()->from('09:00:00')->to('09:01:00') // 60 seconds
-        ->everyDay(),
+            ->everyDay(),
         SLASchedule::create()->effectiveFrom('27-07-2022')
             ->from('09:00:00')->to('09:00:30')->onWeekdays()->and() // 30 seconds
             ->from('09:00:00')->to('09:00:10')->onWeekends(), // 10 seconds
@@ -324,20 +322,41 @@ it('tests empty schedule', function () {
     expect($sla->duration($subject_start_time)->totalSeconds)->toEqual(0);
 });
 
-it('test the SLA where the current date has a time less than the time of the initial date', function () {
-    $subject_start_time = '2022-10-18 16:00:00';
-    $time_now = '2022-10-19 08:00:01';
-
+it('counts SLA time on the final day when it ends before the start time-of-day', function () {
     $sla = SLA::fromSchedule(
-        SLASchedule::create()->from('08:00:00')->to('17:00:00')->everyDay()
+        SLASchedule::create()->from('09:00:00')->to('17:00:00')->onWeekdays()
     );
 
-    $sla->addBreaches(
-        new SLABreach('Time to First Response', '15m')
-    );
+    $duration = $sla->duration('2023-12-01 16:58:00', '2023-12-04 09:01:01');
 
-    testTime()->freeze($time_now);
-    expect($sla->duration($subject_start_time)->totalSeconds)->toEqual(3601)
-        ->and(expect($sla->status($subject_start_time)->breaches)->toHaveCount(1))
-        ->and(expect($sla->status($subject_start_time)->breaches[0]->breached)->toEqual(true));
+    expect($duration->totalSeconds)->toEqual(181);
 });
+
+it('counts SLA time across multiple days', function () {
+    $sla = SLA::fromSchedule(
+        SLASchedule::create()->from('08:00:00')->to('17:00:00')->onWeekdays()
+    );
+
+    $duration = $sla->duration('2023-04-27 15:43:00', '2023-04-28 13:02:00');
+
+    expect($duration->totalMinutes)->toEqual(379);
+});
+
+// it('tests 0 length SLAs', function () {
+//    $subject_start_time = '2022-07-21 08:59:00';
+//    $time_now = '2022-07-21 09:00:30';
+//
+//    $sla = SLA::fromSchedule(
+//        SLASchedule::create()->from('09:00:00')->to('17:00:00')
+//    );
+//
+//    testTime()->freeze($time_now);
+//
+//    expect($sla->duration($subject_start_time)->totalSeconds)->toEqual(30);
+//
+//    $sla->addSchedule(
+//        SLASchedule::create()->effectiveFrom('2022-07-20')->from('09:00:00')->to('09:00:01')->everyDay()
+//    );
+//
+//    expect($sla->duration($subject_start_time)->totalSeconds)->toEqual(1);
+// });

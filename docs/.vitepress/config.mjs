@@ -1,3 +1,5 @@
+import tailwindcss from '@tailwindcss/vite'
+
 export default {
     title: 'SLA Manager',
     base: '/sla-manager/',
@@ -46,5 +48,10 @@ export default {
         socialLinks: [
             { icon: 'github', link: 'https://github.com/julioserpone/sla-manager' },
         ],
+    },
+    vite: {
+        plugins: [
+            tailwindcss()
+        ]
     }
 }

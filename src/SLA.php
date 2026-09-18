@@ -7,8 +7,8 @@ use Carbon\CarbonInterface;
 use Carbon\CarbonInterval;
 use Carbon\CarbonPeriod;
 use Cmixin\EnhancedPeriod;
-use JulioSerpone\SlaManager\Interfaces\AgendaInterface;
 use ReflectionException;
+use JulioSerpone\SlaManager\Interfaces\AgendaInterface;
 
 class SLA
 {
@@ -36,13 +36,13 @@ class SLA
     private float|int $fulfillment;
 
     /**
-     * @param  SLASchedule|array  $schedules
+     * @param  SLASchedule|array<int, SLASchedule>  $schedules
      *
      * @throws ReflectionException
      */
     public function __construct(SLASchedule|array $schedules)
     {
-        \Carbon\CarbonPeriod::mixin(EnhancedPeriod::class);
+        CarbonPeriod::mixin(EnhancedPeriod::class);
 
         collect([$schedules])->flatten(2)->each(function ($b) {
             $this->addSchedule($b);
@@ -58,6 +58,9 @@ class SLA
         return $this;
     }
 
+    /**
+     * @param  SLABreach|array<int, SLABreach>  ...$breaches
+     */
     public function addBreaches(...$breaches): self
     {
         collect([$breaches])->flatten(2)->each(fn ($b) => $this->addBreach($b));
@@ -86,6 +89,9 @@ class SLA
         return $this;
     }
 
+    /**
+     * @param  string|array<int, string>  $dates
+     */
     public function addHolidays($dates): self
     {
         collect([$dates])->flatten(2)->each(fn ($d) => $this->addHoliday($d));
@@ -105,23 +111,25 @@ class SLA
         return new self($definition);
     }
 
+    /**
+     * @param  SLASchedule|array<int, SLASchedule>  $definition
+     */
     public static function fromSchedules(SLASchedule|array $definition): self
     {
         return new self($definition);
     }
 
-    public function status(string $started_at, string $stopped_at = null): SLAStatus
+    public function status(string $started_at, ?string $stopped_at = null): SLAStatus
     {
         return $this->calculate($started_at, $stopped_at);
     }
 
-    public function duration(string $started_at, string $stopped_at = null): CarbonInterval
+    public function duration(string $started_at, ?string $stopped_at = null): CarbonInterval
     {
         return $this->calculate($started_at, $stopped_at)->interval;
     }
 
     /**
-     * @param  string  $started_at
      * @return SLABreach[]
      */
     public function breaches(string $started_at): array
@@ -129,90 +137,195 @@ class SLA
         return $this->calculate($started_at)->breaches;
     }
 
-    private function calculate($subject_start_time, $subject_stop_time = null): SLAStatus
+    private function calculate(string $subject_start_time, ?string $subject_stop_time = null): SLAStatus
     {
-        $main_target_period = $this->get_current_duration(
-            Carbon::parse($subject_start_time),
-            $subject_stop_time ?? Carbon::now()
-        );
+        $subject_start = Carbon::parse($subject_start_time);
+        $subject_end = Carbon::parse($subject_stop_time ?? Carbon::now());
+
+        $subject_start_ts = $subject_start->getTimestamp();
+        $subject_end_ts = $subject_end->getTimestamp();
+
+        $main_target_period = $this->get_current_duration($subject_start, $subject_end);
 
         // TODO End period should just be up until the next schedule is made
-        $sla_periods = $this->recalculate_sla_periods($main_target_period->start, $main_target_period->end);
+        $sla_periods = $this->recalculate_sla_periods($subject_start, $subject_end);
 
-        // Iterate over the period
-        $interval = collect($main_target_period)->map(function (Carbon $daily_subject_period) use ($main_target_period, &$sla_periods) {
-            /**
-             * After we've divided each day, find where the start and end times are by min/max'ing them
-             */
-            $start_of_day = max($main_target_period->start->clone(), $daily_subject_period->clone());
-            $end_of_day = min($main_target_period->end->clone(), $daily_subject_period->clone()->addHours(24));
+        $schedule_valid_from_unixes = array_map(
+            fn (SLASchedule $schedule) => Carbon::parse($schedule->valid_from)->startOfDay()->unix(),
+            $this->schedules
+        );
 
-            /**
-             * Create a 24h period
-             */
-            $daily_period = CarbonPeriod::create($start_of_day, $end_of_day)
-                ->setDateInterval(CarbonInterval::seconds());
+        $default_schedule = SLASchedule::create();
+
+        $pause_periods = collect($this->pause_periods)
+            ->map(fn (SLAPause $pp) => $pp->toPeriod()->setDateInterval(CarbonInterval::seconds()))
+            ->sortBy(fn (CarbonPeriod $p) => $p->start?->getTimestamp())
+            ->values()
+            ->toArray();
+
+        $sla_cursor = 0;
+        $pause_cursor = 0;
+        $enabled_schedule = null;
+        $last_enabled_schedule = null;
+        $valid_from_unix = null;
+        $total_seconds = 0;
+
+        // Iterate over the period, one day at a time. Each day is anchored at the start of
+        // day, so its bounds and the schedule lookups only need integer timestamps.
+        foreach ($main_target_period as $daily) {
+            $daily_ts = $daily->getTimestamp();
+            $day_start_ts = max($subject_start_ts, $daily_ts);
+            $day_end_ts = min($subject_end_ts, $daily_ts + 86400);
 
             /**
              * Grab the enabled schedule, compare this every day to see if we now have a schedule that would
              * supersede it.
              */
-            $enabled_schedule = $this->get_enabled_schedule_for_day($daily_period->start);
+            $enabled_schedule = $default_schedule;
+            foreach ($this->schedules as $index => $schedule) {
+                if ($schedule_valid_from_unixes[$index] <= $daily_ts) {
+                    $enabled_schedule = $schedule;
+                }
+            }
+
+            if ($enabled_schedule !== $last_enabled_schedule) {
+                $last_enabled_schedule = $enabled_schedule;
+                $valid_from_unix = Carbon::parse($enabled_schedule->valid_from)->startOfDay()->unix();
+            }
 
             /**
              * Deduplicate our SLA Periods
              * Why do this here? Mostly because of superseded schedules...
              */
-            if ($daily_period->start->clone()->startOfDay()->unix() === Carbon::parse($enabled_schedule->valid_from)->clone()->startOfDay()->unix()) {
-                $sla_periods = $this->recalculate_sla_periods($daily_period->start, $main_target_period->end);
+            if ($daily_ts === $valid_from_unix) {
+                $sla_periods = $this->recalculate_sla_periods($daily, $subject_end);
+                $sla_cursor = 0;
+            }
+
+            /**
+             * Only consider SLA periods that can possibly overlap the current day, otherwise
+             * the work below would scale with the entire subject duration on every day.
+             *
+             * The periods are generated in chronological order, so a single forward-only
+             * cursor sweeps them without rescanning the whole list for every day.
+             */
+            $sla_count = count($sla_periods);
+            while ($sla_cursor < $sla_count && $sla_periods[$sla_cursor][1]->getTimestamp() <= $day_start_ts) {
+                $sla_cursor++;
+            }
+
+            $day_sla_periods = [];
+            for ($i = $sla_cursor; $i < $sla_count; $i++) {
+                if ($sla_periods[$i][0]->getTimestamp() >= $day_end_ts) {
+                    break;
+                }
+
+                $day_sla_periods[] = $sla_periods[$i];
             }
 
             /**
              * SLA Overlap
-             * This function has been optimised
+             *
+             * Clip each SLA period to the current day and merge the results into a
+             * continuous union using integer timestamps, avoiding the per-day cost of
+             * building CarbonPeriod objects and diffing them via spatie/period.
              */
-            $sla_coverage_periods = collect($sla_periods)
-                ->map(function (CarbonPeriod $sla_period) use ($daily_period) {
-                    $e = max($sla_period->start->getTimestamp(), $daily_period->start->getTimestamp());
-                    $f = min($sla_period->end->getTimestamp(), $daily_period->end->getTimestamp());
+            $coverage = [];
+            foreach ($day_sla_periods as [$period_start, $period_end]) {
+                $start = max($period_start->getTimestamp(), $day_start_ts);
+                $end = min($period_end->getTimestamp(), $day_end_ts);
 
-                    if ($e > $f) {
-                        return null;
-                    } // No Overlap
+                if ($start >= $end) {
+                    continue;
+                }
 
-                    return CarbonPeriod::create(
-                        Carbon::createFromTimestamp($e),
-                        Carbon::createFromTimestamp($f),
-                    )->setDateInterval(CarbonInterval::seconds());
-                })
-                ->whereNotNull()
-                ->reduce(function ($carry, CarbonPeriod $p) {
-                    /** De-duplicate overlapping SLA periods */
-                    return count($carry) ? [...$p->diff(...$carry), ...$carry] : [$p];
-                }, []);
+                $coverage[] = [$start, $end];
+            }
 
-            if ($this->pause_periods) {
-                $sla_coverage_periods = collect($sla_coverage_periods)->flatMap(function (CarbonPeriod $period) {
-                    $pause_periods = collect($this->pause_periods)->map(fn (SLAPause $pp) => $pp->toPeriod()->setDateInterval(CarbonInterval::seconds()))->toArray();
+            if (count($coverage) > 1) {
+                usort($coverage, fn (array $a, array $b) => $a[0] <=> $b[0]);
+            }
 
-                    return $period->diff(...$pause_periods);
+            $merged = [];
+            foreach ($coverage as [$start, $end]) {
+                if ($merged && $start <= $merged[count($merged) - 1][1]) {
+                    $merged[count($merged) - 1][1] = max($merged[count($merged) - 1][1], $end);
+                } else {
+                    $merged[] = [$start, $end];
+                }
+            }
+
+            /**
+             * Subtract the pauses that overlap the current day, reproducing the
+             * closed-interval semantics of spatie/period (the instants a pause
+             * starts and ends at are consumed by it).
+             *
+             * The pauses are sorted by start time and swept with a forward-only
+             * cursor, so only pauses that can overlap the day are considered.
+             */
+            if ($pause_periods) {
+                $pause_count = count($pause_periods);
+                while ($pause_cursor < $pause_count && ($pause_periods[$pause_cursor]->end === null || $pause_periods[$pause_cursor]->end->getTimestamp() <= $day_start_ts)) {
+                    $pause_cursor++;
+                }
+
+                $day_pause_periods = [];
+                for ($i = $pause_cursor; $i < $pause_count; $i++) {
+                    $pause = $pause_periods[$i];
+
+                    if ($pause->start === null || $pause->end === null) {
+                        continue;
+                    }
+
+                    if ($pause->start->getTimestamp() >= $day_end_ts) {
+                        break;
+                    }
+
+                    $day_pause_periods[] = $pause;
+                }
+
+                $merged = collect($merged)->flatMap(function (array $pair) use ($day_pause_periods) {
+                    $parts = [$pair];
+
+                    foreach ($day_pause_periods as $pause) {
+                        $pause_start = $pause->start?->getTimestamp();
+                        $pause_end = $pause->end?->getTimestamp();
+
+                        if ($pause_start === null || $pause_end === null || $pause_end < $pair[0] || $pause_start > $pair[1]) {
+                            continue;
+                        }
+
+                        $next = [];
+                        foreach ($parts as [$start, $end]) {
+                            if ($pause_start - 1 >= $start) {
+                                $next[] = [$start, min($end, $pause_start - 1)];
+                            }
+
+                            if ($pause_end + 1 <= $end) {
+                                $next[] = [max($start, $pause_end + 1), $end];
+                            }
+                        }
+
+                        $parts = $next;
+
+                        if (! $parts) {
+                            break;
+                        }
+                    }
+
+                    return $parts;
                 })->toArray();
             }
 
             /**
-             * Get the interval of each overlapping period and place it into an array of intervals
+             * Sum the seconds of every remaining coverage period of the day
              */
-            /** @var CarbonInterval[] $intervals */
-            $intervals = collect($sla_coverage_periods)
-                ->map(fn (CarbonPeriod $carbonPeriod): CarbonInterval => self::calculate_interval($carbonPeriod))
-                ->toArray();
+            foreach ($merged as [$start, $end]) {
+                $total_seconds += $end - $start;
+            }
+        }
 
-            return self::combine_intervals($intervals);
-
-            /**
-             * Then combine all intervals
-             */
-        })->pipe(fn ($c) => self::combine_intervals($c->toArray()));
+        $interval = CarbonInterval::seconds((int) round($total_seconds))->cascade();
 
         $this->fulfillment = collect($this->breach_definitions)
             ->each(fn (SLABreach $b) => $b->check($interval))
@@ -227,6 +340,9 @@ class SLA
         );
     }
 
+    /**
+     * @return array<int, array{0: CarbonInterface, 1: CarbonInterface}>
+     */
     private function recalculate_sla_periods(CarbonInterface $from, CarbonInterface $to): array
     {
         return collect($this->get_enabled_schedule_for_day($from)->agendas)
@@ -237,22 +353,21 @@ class SLA
     /**
      * Gets the current subject duration, sets the interval to 1d and filters out anything we don't want
      *
-     * @param $subject_start_time
-     * @param $end_date_time
-     * @return CarbonPeriod
+     * The period is anchored to the start of day so that the final (potentially partial) day is always
+     * included in the iteration, otherwise any SLA time on the end date would be missed.
      */
-    private function get_current_duration($subject_start_time, $end_date_time): CarbonPeriod
+    private function get_current_duration(CarbonInterface $subject_start_time, CarbonInterface $end_date_time): CarbonPeriod
     {
-        return CarbonPeriod::create($subject_start_time, $end_date_time)
+        return CarbonPeriod::create(
+            $subject_start_time->clone()->startOfDay(),
+            $end_date_time->clone()->startOfDay()
+        )
             ->setDateInterval(CarbonInterval::day(1))
             ->addFilter(fn (Carbon $date) => self::filter_out_excluded_dates($date));
     }
 
     /**
      * Gets the enabled schedule for any given day
-     *
-     * @param  Carbon  $day
-     * @return SLASchedule
      */
     private function get_enabled_schedule_for_day(CarbonInterface $day): SLASchedule
     {
@@ -260,58 +375,11 @@ class SLA
             ->filter(function (SLASchedule $schedule) use ($day) {
                 return Carbon::parse($schedule->valid_from)->startOfDay()->getTimestamp() <= $day->getTimestamp();
             })
-            ->last();
-    }
-
-    /**
-     * Turns a single period into an interval
-     *
-     * @param $period
-     * @return CarbonInterval
-     */
-    private static function calculate_interval($period): CarbonInterval
-    {
-        return CarbonInterval::seconds($period->end->getTimestamp() - $period->start->getTimestamp());
-    }
-
-    /**
-     * Combines two different intervals
-     *
-     * @param  array  $intervals
-     * @return CarbonInterval
-     */
-    private static function combine_intervals(array $intervals): CarbonInterval
-    {
-        return collect($intervals)
-            ->reduce(function (CarbonInterval $i, CarbonInterval $overlapping_period) {
-                return $i->add($overlapping_period->cascade())->cascade();
-            }, CarbonInterval::seconds(0));
-    }
-
-    /**
-     * Filter only the days of the week in the schedule
-     *
-     * @param  Carbon  $date
-     * @return bool
-     */
-    private function filter_in_days_of_week_in_schedule(Carbon $date): bool
-    {
-        foreach ($this->schedules as $schedule) {
-            // TODO add a start validity here
-
-            foreach ($schedule->agendas as $agenda) {
-                return (bool) count($agenda->getPeriodsForDay($date->dayName));
-            }
-        }
-
-        return false;
+            ->last() ?? SLASchedule::create();
     }
 
     /**
      * Filter out any excluded dates
-     *
-     * @param  Carbon  $date
-     * @return bool
      */
     private static function filter_out_excluded_dates(Carbon $date): bool
     {
@@ -321,7 +389,6 @@ class SLA
     public function fulfillment($subject_start_time, $subject_stop_time = null): float|int
     {
         $this->calculate($subject_start_time, $subject_stop_time);
-
         return $this->fulfillment;
     }
 }

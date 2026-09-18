@@ -4,9 +4,9 @@ use Carbon\CarbonPeriod;
 use Cmixin\EnhancedPeriod;
 use JulioSerpone\SlaManager\SLASchedule;
 
-//beforeEach(function () {
+// beforeEach(function () {
 //    CarbonPeriod::mixin(EnhancedPeriod::class);
-//});
+// });
 
 /**
  * Daily Periods
