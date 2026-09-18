@@ -9,8 +9,8 @@ use JulioSerpone\SlaManager\Traits\HasTimezone;
 
 class SLASchedule
 {
-    use HasTimezone;
     use CanComposeSLASchedules;
+    use HasTimezone;
 
     public string $valid_from = '1970-01-01 00:00:01';
 

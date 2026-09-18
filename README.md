@@ -4,7 +4,7 @@
 [![Total Downloads](https://img.shields.io/packagist/dt/julioserpone/sla-manager.svg?style=flat&labelColor=2c353c)](https://packagist.org/packages/julioserpone/sla-manager)
 ![GitHub Actions](https://github.com/julioserpone/sla-manager/actions/workflows/main.yml/badge.svg)
 
-A PHP package to calculate and track Service Level Agreement completion times.
+A PHP package for calculating & tracking the Service Level Agreement completion timings.
 
 Inspired from the [sla-timer](https://github.com/sifex/sla-timer) pack.
 
@@ -15,17 +15,9 @@ Inspired from the [sla-timer](https://github.com/sifex/sla-timer) pack.
 - 🏝 Holiday & Paused Durations
 
 ---
-
-
-<a href="https://twitter.com/julioserpone/status/1578441324558135298">
-<img src="https://github.com/julioserpone/sla-manager/raw/HEAD/.github/assets/hiring.svg?" alt="Hi, I'm Julio & I'm currently looking for a Laravel job. Please reach out to me via twitter, or click this link." height="49">
-</a>
-
-
----
 ## Installation
 
-You can install the `sla-manager` via composer:
+You can install the `sla-timer` via composer:
 
 ```bash
 composer require julioserpone/sla-manager
